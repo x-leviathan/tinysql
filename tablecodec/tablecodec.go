@@ -55,46 +55,121 @@ func TablePrefix() []byte {
 
 // appendTableRecordPrefix appends table record prefix  "t[tableID]_r".
 func appendTableRecordPrefix(buf []byte, tableID int64) []byte {
+	// 在buf中写入tablePrefix
 	buf = append(buf, tablePrefix...)
+	// 在buf中写入tableID （关键数据）
 	buf = codec.EncodeInt(buf, tableID)
+	// 在buf中写入recordPrefixSep
 	buf = append(buf, recordPrefixSep...)
 	return buf
 }
 
 // EncodeRowKeyWithHandle encodes the table id, row handle into a kv.Key
+// 参考1
 func EncodeRowKeyWithHandle(tableID int64, handle int64) kv.Key {
+	// 声明并初始化buf byte[]
 	buf := make([]byte, 0, RecordRowKeyLen)
+	// 写入tablePrefix和tableID以及recordPredixSep
 	buf = appendTableRecordPrefix(buf, tableID)
+	// 写入rowID（handle）
 	buf = codec.EncodeInt(buf, handle)
 	return buf
 }
 
 // DecodeRecordKey decodes the key and gets the tableID, handle.
+// *** 2021.04.03, FINISH , TEST OK
 func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
 	/* Your code here */
-	return
+
+	// 1. 检查tablePrefix
+	for i := range tablePrefix {
+		if i >= len(key) || tablePrefix[i] != key[i] {
+			return 0, 0, errors.New("wrong key1")
+		}
+	}
+
+	// 2. 解析出tableID
+	tableIDBegin := key[tablePrefixLength:]
+	recordPrefixSepBegin, tableID, err := codec.DecodeInt(tableIDBegin)
+	if err != nil {
+		return tableID, 0, err
+	}
+
+	// 3. 解析出recordPrefixSep
+	for i := range recordPrefixSep {
+		if recordPrefixSep[i] != recordPrefixSepBegin[i] {
+			return 0, 0, errors.New("wrong key2")
+		}
+	}
+	rowIDBegin := recordPrefixSepBegin[recordPrefixSepLength:]
+
+	// 4. 解析出rowID（handle）
+	rowIDBegin, handle, err = codec.DecodeInt(rowIDBegin)
+	if err != nil {
+		return tableID, handle, err
+	}
+	return tableID, handle, nil
 }
 
 // appendTableIndexPrefix appends table index prefix  "t[tableID]_i".
 func appendTableIndexPrefix(buf []byte, tableID int64) []byte {
+	// 写入tablePrefix
 	buf = append(buf, tablePrefix...)
+	// 写入tableID
 	buf = codec.EncodeInt(buf, tableID)
+	// 写入indexPrefixSep
 	buf = append(buf, indexPrefixSep...)
 	return buf
 }
 
 // EncodeIndexSeekKey encodes an index value to kv.Key.
+// 参考2
 func EncodeIndexSeekKey(tableID int64, idxID int64, encodedValue []byte) kv.Key {
 	key := make([]byte, 0, prefixLen+idLen+len(encodedValue))
+	// 写入tablePrefix， tableID， indexPrefixSep
 	key = appendTableIndexPrefix(key, tableID)
+	// 写入indexId（idxID）
 	key = codec.EncodeInt(key, idxID)
+	// 写入encodedValue
 	key = append(key, encodedValue...)
 	return key
 }
 
 // DecodeIndexKeyPrefix decodes the key and gets the tableID, indexID, indexValues.
+// TODO: 2
 func DecodeIndexKeyPrefix(key kv.Key) (tableID int64, indexID int64, indexValues []byte, err error) {
 	/* Your code here */
+
+	// 1. 检查tablePrefix
+	for i := range tablePrefix {
+		if i >= len(key) || tablePrefix[i] != key[i] {
+			return 0, 0, nil, errors.New("wrong key 1")
+		}
+	}
+	tableIDBegin := key[tablePrefixLength:]
+
+	// 2. 解析tableID
+	indexPrefixSepBegin, tableID, err := codec.DecodeInt(tableIDBegin)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+
+	// 3. 检查indexPrefixSep
+	for i := range indexPrefixSep {
+		if i >= len(indexPrefixSepBegin) || indexPrefixSep[i] != indexPrefixSepBegin[i] {
+			return 0, 0, nil, errors.New("wrong key 2")
+		}
+	}
+	indexIDBegin := indexPrefixSepBegin[len(indexPrefixSep):]
+
+	// 4. 解析indexID
+	indexValues, indexID, err = codec.DecodeInt(indexIDBegin)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+
+	// 5. 解析indexValues
+	// 剩下的就是indexValues
 	return tableID, indexID, indexValues, nil
 }
 
